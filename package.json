@@ -1,0 +1,22 @@
+{
+  "name": "to.pinf.lib",
+  "version": "0.1.0",
+  "bin": {
+    "pinf-bundle": "./bin/pinf-bundle"
+  },
+  "config": {
+    "pio.deploy.converter": {
+      "name": "nodejs-lib"
+    }
+  },
+  "dependencies": {
+    "fs-extra": "~0.14.0",
+    "gulp": "^3.8.11",
+    "gulp-filter": "^2.0.2",
+    "gulp-replace": "^0.5.3",
+    "pinf-for-nodejs": "0.1.x",
+    "pinf-it-program-insight": "0.1.x",
+    "pinf-loader-js": "0.4.x",
+    "waitfor": "~0.1.3"
+  }
+}
