@@ -13,6 +13,7 @@
     "fs-extra": "~0.14.0",
     "gulp": "^3.8.11",
     "gulp-filter": "^2.0.2",
+    "gulp-rename": "^1.2.0",
     "gulp-replace": "^0.5.3",
     "pinf-for-nodejs": "0.1.x",
     "pinf-it-program-insight": "0.1.x",
