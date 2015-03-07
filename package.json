@@ -2,7 +2,8 @@
   "name": "to.pinf.lib",
   "version": "0.1.0",
   "bin": {
-    "pinf-bundle": "./bin/pinf-bundle"
+    "pinf-bundle": "./bin/pinf-bundle",
+    "pinf-run": "./bin/pinf-run"
   },
   "config": {
     "pio.deploy.converter": {
@@ -10,14 +11,18 @@
     }
   },
   "dependencies": {
+    "colors": "^1.0.3",
     "fs-extra": "~0.14.0",
     "gulp": "^3.8.11",
+    "gulp-debug": "^2.0.1",
     "gulp-filter": "^2.0.2",
+    "gulp-plumber": "^0.6.6",
     "gulp-rename": "^1.2.0",
     "gulp-replace": "^0.5.3",
     "pinf-for-nodejs": "0.1.x",
     "pinf-it-program-insight": "0.1.x",
     "pinf-loader-js": "0.4.x",
+    "request": "^2.53.0",
     "waitfor": "~0.1.3"
   }
 }
