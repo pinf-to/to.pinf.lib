@@ -127,9 +127,7 @@ require("../lib/run").for(module, function (API, callback) {
 		return setTimeout(function () {
 	        console.log(("Quitting.").magenta);
 	        process.stdin.end();
-	        if (callback) {
-				return callback(null);
-			}
+	        return process.exit(0);
 		}, 1000);
 	}
 
@@ -157,7 +155,7 @@ require("../lib/run").for(module, function (API, callback) {
 			}
 
 			if (data === "q") {
-				return killAll(callback);
+				return killAll();
 			}
 
 			for (var programNumber in bootedPrograms) {
@@ -185,219 +183,285 @@ require("../lib/run").for(module, function (API, callback) {
 			return;
 		});
 
-		// NOTE: We return WITHOUT running callback which gets triggered when "q" is received on stdin above.
-		return writeHeader();
+		writeHeader();
+		return callback();
+	}
+
+	function killPIDs (pids, callback) {
+
+		var command = "kill " + pids.join(" ");
+
+		console.log(("Run: " + command).magenta);
+
+		return API.EXEC(command, function (err, stdout, stderr) {
+			if (stdout) process.stdout.write(stdout);
+			if (stderr) process.stderr.write(stderr);
+			if (err) {
+				return callback(/* purposely not returning error */);
+			}
+			return callback();
+		});		
 	}
 
 	return API.getPrograms(function (err, programs) {
 		if (err) return callback(err);
 
-		var waitfor = API.WAITFOR.serial(function (err) {
+		return runREPL(function (err) {
 			if (err) return callback(err);
-			return runREPL(callback);
-		});
 
-		var Program = function (programDescriptorPath) {
-			var self = this;
+			var waitfor = API.WAITFOR.serial(function (err) {
+				if (err) return callback(err);
 
-			programDescriptor = programs[programDescriptorPath];
-			var declaringDescriptor = programDescriptor._declaringDescriptor;
+				// NOTE: We are NOT calling `callback()` here as `runREPL()` has already taken over!
+				return;
+			});
 
-			API.ASSERT.equal(typeof programDescriptor.combined.name, "string", "name' must be set in '" + programDescriptorPath + "'");
+			var Program = function (programDescriptorPath) {
+				var self = this;
 
-			self.label = programDescriptor.combined.name.toLowerCase();
+				programDescriptor = programs[programDescriptorPath];
+				var declaringDescriptor = programDescriptor._declaringDescriptor;
 
-			console.log("Run program '" + self.label + "':", programDescriptorPath);
+				API.ASSERT.equal(typeof programDescriptor.combined.name, "string", "name' must be set in '" + programDescriptorPath + "'");
+
+				self.label = programDescriptor.combined.name.toLowerCase();
+
+				console.log("Run program '" + self.label + "':", programDescriptorPath);
 
 
-			self.number = Object.keys(bootedPrograms).length + 1;
-			self.process = null;
+				self.number = Object.keys(bootedPrograms).length + 1;
+				self.process = null;
 
-			self.kill = function (callback) {
+				self.startupPIDs = {};
+				self.startupInterval = null;
 
-				if (!callback) {
-					callback = function (err) {
-						return;
+				self.indexPIDs = function (callback) {
+					if (!callback) {
+						callback = function (err) {
+							return;
+						}
 					}
-				}
-
-				console.log(("Killing program '" + self.label + "'").magenta);
-
-				return getProcesses(function (err, processes) {
-					if (err) return callback(err);
-
-					var pids = [];
-					if (self.process.pid) {
-						pids.push(self.process.pid);
-						function traverse (node) {
-							if (
-								node &&
-								node.children &&
-								node.children.length > 0
-							) {
-								node.children.forEach(function (pid) {
-									pids.push(pid);
-									return traverse(processes.byPid[""+pid]);
-								});
+					return getProcesses(function (err, processes) {
+						if (err) return callback(err);
+						var pids = [];
+						if (self.process.pid) {
+							pids.push(self.process.pid);
+							function traverse (node) {
+								if (
+									node &&
+									node.children &&
+									node.children.length > 0
+								) {
+									node.children.forEach(function (pid) {
+										pids.push(pid);
+										return traverse(processes.byPid[""+pid]);
+									});
+								}
 							}
+							traverse(processes.byPid[""+self.process.pid]);
 						}
-						traverse(processes.byPid[""+self.process.pid]);
-					}
-
-					if (pids.length > 0) {
-
 						pids.reverse();
-
-						var command = "kill " + pids.join(" ");
-
-						console.log(("Run: " + command).magenta);
-
-						return API.EXEC(command, function (err, stdout, stderr) {
-							if (stdout) process.stdout.write(stdout);
-							if (stderr) process.stderr.write(stderr);
-							return callback(null);
-						});
-					}
-				});
-			};
-
-			self.start = function (callback) {
-
-				if (!callback) {
-					callback = function (err) {
-				    	return;
-					}
-				}
-
-				try {
-
-					var env = {};
-					for (var name in process.env) {
-						env[name] = process.env[name];
-					}
-					if (declaringDescriptor.env) {
-						for (var name in declaringDescriptor.env) {
-							env[name] = declaringDescriptor.env[name];
-						}
-					}
-
-					function waitUntilAlive () {
-						if (
-							!declaringDescriptor.routes ||
-							!declaringDescriptor.routes.alive
-						) {
-							return callback(null);
-						}
-
-						var url = "http://127.0.0.1:" + env.PORT + declaringDescriptor.routes.alive.uri;
-
-						console.log(("Waiting until program '" + self.label + "' is alive by checking route '" + url + "' against '" + JSON.stringify(declaringDescriptor.routes.alive.expect) + "'.").magenta);
-
-						function checkAgain () {
-							setTimeout(function () {
-								doCheck();
-							}, 1000);
-						}
-
-						function doCheck () {
-							return API.REQUEST({
-								method: "GET",
-								url: url
-							}, function (err, response, body) {
-								if (err) {
-									return checkAgain();
-								}
-								for (var name in declaringDescriptor.routes.alive.expect) {
-									if (response[name] !== declaringDescriptor.routes.alive.expect[name]) {
-										return checkAgain();
-									}
-								}
-								console.log(("Done starting program '" + self.label + "'!").magenta);
-								return callback(null);
+						if (self.startupPIDs) {
+							pids.forEach(function (pid) {
+								self.startupPIDs[pid] = true;
 							});
 						}
+						return callback(null, pids);
+					});
+				};
 
-						return doCheck();
+				self.kill = function (callback) {
+					if (!callback) {
+						callback = function (err) {
+							return;
+						}
 					}
+					console.log(("Killing program '" + self.label + "'").magenta);
+					return self.indexPIDs(function (err, pids) {
+						if (err) return callback(err);
+						if (pids.length === 0) {
+							return callback(null);
+						}
+						return killPIDs(pids, callback);
+					});
+				};
 
-					// Return when no message comes in within one second as we assume server setup is done.
-					// i.e. For a server to stop us from proceeding it should issue a "." every 1/2 a second
-					//      which doubles as a good responsiveness heartbeat.
-					var lastMessageTime = null;
-					var lastMessageTimeout = null;
-					function onNewMessage () {
-						lastMessageTime = Date.now();
-						if (!lastMessageTimeout) {
-							function makeTimeout () {
-								lastMessageTimeout = setTimeout(function () {
-									var offset = (Date.now() - 1000) - lastMessageTime;
-									if (offset < 0) {
-										return makeTimeout();
-									}
-									console.log(("Done booting program '" + self.label + "'.").magenta);
-									return waitUntilAlive();
-								}, 1000);
-							}
-							return makeTimeout();
+				self.start = function (_callback) {
+
+					if (!_callback) {
+						_callback = function (err) {
+					    	return;
 						}
 					}
 
-					var command = "npm run-script run";
+					var callback = function (err) {
+						if (err) {
+							var pids = Object.keys(self.startupPIDs);
+							if (pids.length === 0) {
+								return _callback(err);
+							}
+							return killPIDs(pids, function () {
+								return _callback(err);
+							});
+						}
+						clearInterval(self.startupInterval);
+						self.startupInterval = null;
+						self.startupPIDs = null;
+						return _callback(err);
+					}
 
-					console.log(("Run: " + command + " (PORT: " + env.PORT + ", cwd: " + API.PATH.dirname(programDescriptorPath) + ")").magenta);
+					try {
 
-				    self.process = API.SPAWN(command.split(" ").shift(), command.split(" ").slice(1), {
-				    	cwd: API.PATH.dirname(programDescriptorPath),
-				    	env: env
-				    });
-				    // TODO: Buffer calls to console and prefix and flush periodically so we
-				    //       don't prefix partial written lines.
-				    function prefixAndWrite (stream, prefixColor, lines) {
-				    	lines = lines.toString().replace(/\n+/g, "\n").replace(/\n$/, "");
-				    	if (!lines) return;
-				    	var prefix = ("[" + self.number + ":" + self.label + "] ").bold;
-				    	if (prefixColor) {
-				    		prefix = prefix[prefixColor];
-				    	}
-				    	stream.write(prefix + lines.split("\n").join("\n" + prefix) + "\n");
-				    }
-				    self.process.on("error", function(err) {
-				    	process.stdout.write(("[" + self.number + ":" + self.label + "] ERROR[1]: ").bold + (""+err.stack).red);
-				    	return callback(err);
-				    });
-				    self.process.stdout.on("data", function (data) {
-				    	onNewMessage();
-				    	prefixAndWrite(process.stdout, null, data);
-				    });
-				    self.process.stderr.on("data", function (data) {
-				    	onNewMessage();
-				    	prefixAndWrite(process.stdout, "red", data);
-				    });
+						var env = {};
+						for (var name in process.env) {
+							env[name] = process.env[name];
+						}
+						if (declaringDescriptor.env) {
+							for (var name in declaringDescriptor.env) {
+								env[name] = declaringDescriptor.env[name];
+							}
+						}
 
-				} catch (err) {
-			    	process.stdout.write(("[" + self.number + ":" + self.label + "] ERROR[2]: ").bold + (""+err.stack).red);
-					return callback(err);
+						function waitUntilAlive () {
+							if (
+								!declaringDescriptor.routes ||
+								!declaringDescriptor.routes.alive
+							) {
+								return callback(null);
+							}
+
+							var url = "http://127.0.0.1:" + env.PORT + declaringDescriptor.routes.alive.uri;
+
+							console.log(("Waiting until program '" + self.label + "' is alive by checking route '" + url + "' against '" + JSON.stringify(declaringDescriptor.routes.alive.expect) + "'.").magenta);
+
+							function checkAgain () {
+								setTimeout(function () {
+									doCheck();
+								}, 1000);
+							}
+
+							function doCheck () {
+								return API.REQUEST({
+									method: "GET",
+									url: url
+								}, function (err, response, body) {
+									if (err) {
+										return checkAgain();
+									}
+									for (var name in declaringDescriptor.routes.alive.expect) {
+										if (response[name] !== declaringDescriptor.routes.alive.expect[name]) {
+											return checkAgain();
+										}
+									}
+									console.log(("Done starting program '" + self.label + "'!").magenta);
+									return callback(null);
+								});
+							}
+
+							return doCheck();
+						}
+
+						// Return when no message comes in within one second as we assume server setup is done.
+						// i.e. For a server to stop us from proceeding it should issue a "." every 1/2 a second
+						//      which doubles as a good responsiveness heartbeat.
+						var lastMessageTime = null;
+						var lastMessageTimeout = null;
+						function onNewMessage () {
+							lastMessageTime = Date.now();
+							if (!lastMessageTimeout) {
+								function makeTimeout () {
+									lastMessageTimeout = setTimeout(function () {
+										var offset = (Date.now() - 1000) - lastMessageTime;
+										if (offset < 0) {
+											return makeTimeout();
+										}
+										console.log(("Done booting program '" + self.label + "'.").magenta);
+										return waitUntilAlive();
+									}, 1000);
+								}
+								return makeTimeout();
+							}
+						}
+
+						var command = "npm run-script run";
+
+						console.log(("Run: " + command + " (PORT: " + env.PORT + ", cwd: " + API.PATH.dirname(programDescriptorPath) + ")").magenta);
+
+					    self.process = API.SPAWN(command.split(" ").shift(), command.split(" ").slice(1), {
+					    	cwd: API.PATH.dirname(programDescriptorPath),
+					    	env: env
+					    });
+					    // TODO: Buffer calls to console and prefix and flush periodically so we
+					    //       don't prefix partial written lines.
+					    function prefixAndWrite (stream, prefixColor, lines) {
+					    	lines = lines.toString().replace(/\n+/g, "\n").replace(/\n$/, "");
+					    	if (!lines) return;
+					    	var prefix = ("[" + self.number + ":" + self.label + "] ").bold;
+					    	if (prefixColor) {
+					    		prefix = prefix[prefixColor];
+					    	}
+					    	stream.write(prefix + lines.split("\n").join("\n" + prefix) + "\n");
+					    	// TODO: Make these error lookup strings configurable.
+					    	if (
+					    		/Error: Cannot find module/.test(lines) ||
+					    		/ERR!/.test(lines)
+					    	) {
+					    		if (!prefixAndWrite._error) {
+					    			self.indexPIDs();
+							    	prefixAndWrite._error = true;
+							    	return setTimeout(function () {
+							    		return callback(new Error("Detected an error in program output!"));
+							    	}, 250);
+					    		}
+					    	}
+					    }
+					    self.process.on("error", function(err) {
+					    	process.stdout.write(("[" + self.number + ":" + self.label + "] ERROR[1]: ").bold + (""+err.stack).red);
+					    	return callback(err);
+					    });
+					    self.process.stdout.on("data", function (data) {
+					    	onNewMessage();
+					    	prefixAndWrite(process.stdout, null, data);
+					    });
+					    self.process.stderr.on("data", function (data) {
+					    	onNewMessage();
+					    	prefixAndWrite(process.stdout, "red", data);
+					    });
+
+					    self.startupInterval = setInterval(function () {
+					    	self.indexPIDs();
+					    }, 900);
+
+					} catch (err) {
+				    	process.stdout.write(("[" + self.number + ":" + self.label + "] ERROR[2]: ").bold + (""+err.stack).red);
+						return callback(err);
+					}
+				};
+			}
+
+			var found = false;
+			for (var programDescriptorPath in programs) {
+				if (process.argv[2]) {
+					if (programs[programDescriptorPath]._declaringId !== process.argv[2]) {
+						continue;
+					}
 				}
-			};
-		}
+				found = true;
+				waitfor(programDescriptorPath, function (programDescriptorPath, done) {
+					try {
+						var program = new Program(programDescriptorPath);
+						bootedPrograms[program.number] = program;
+						return program.start(done);
+					} catch (err) {
+						return done(err);
+					}
+				});
+			}
+			if (!found) {
+				return callback(new Error("No program found at id '" + process.argv[2] + "'!"));
+			}
 
-		for (var programDescriptorPath in programs) {
-			waitfor(programDescriptorPath, function (programDescriptorPath, done) {
-
-				try {
-
-					var program = new Program(programDescriptorPath);
-
-					bootedPrograms[program.number] = program;
-
-					return program.start(done);
-
-				} catch (err) {
-					return done(err);
-				}
-			});
-		}
-
-		return waitfor();
+			return waitfor();
+		});
 	});
 });
