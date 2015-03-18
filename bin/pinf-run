@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "DEPRECATED: to.pinf.lib/bin/pinf-run; use 'pto show' instead"
+
 # @credit http://stackoverflow.com/a/246128/330439
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do

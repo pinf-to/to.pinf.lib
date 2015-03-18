@@ -1,0 +1,7 @@
+#!/bin/bash
+# Source https://github.com/cadorn/bash.origin
+eval __PROTOTYPE__BO_SELF_BASH_SOURCE="$BO_READ_SELF_BASH_SOURCE"
+BO_deriveSelfDir __PROTOTYPE__BO_DIR__ "$__PROTOTYPE__BO_SELF_BASH_SOURCE"
+
+
+BO_run_node "$__PROTOTYPE__BO_DIR__/pto.js" --plugin "$__BO_DIR__/.." $@

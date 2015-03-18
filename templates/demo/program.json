@@ -1,0 +1,6 @@
+{
+	"name": "demo",
+	"boot": {
+	    "package": "./package.json"
+	}
+}

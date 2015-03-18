@@ -8,6 +8,8 @@ COLORS.setTheme({
 
 require("../lib/run").for(module, function (API, callback) {
 
+	console.log("DEPRECATED: to.pinf.lib/bin/pinf-run; use 'pto show' instead");
+
 	var bootedPrograms = {};
 
 	// TODO: Put this into utility module/package.
