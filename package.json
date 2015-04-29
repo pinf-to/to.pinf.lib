@@ -17,7 +17,6 @@
     "gulp-rename": "^1.2.0",
     "gulp-replace": "^0.5.3",
     "gulp-watch": "^4.2.4",
-    "it.pinf.lib": "0.1.x",
     "org.pinf.lib": "0.1.x",
     "require.async": "^0.1.1"
   }
