@@ -7,6 +7,6 @@ function init {
 	local __BO_DIR__="$___TMP___"
 
 
-	BO_sourcePrototype "$__BO_DIR__/../node_modules/org.pinf.lib/bin/init.prototype" "$__BO_DIR__/pto.js"
+	BO_sourcePrototype "$__BO_DIR__/../node_modules/org.pinf.genesis.lib/bin/init.prototype" "$__BO_DIR__/pto.js"
 }
 init $@
